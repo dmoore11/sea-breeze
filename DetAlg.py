@@ -1,8 +1,15 @@
 """
 Daniel Moore
 
-The purpose of this module will be to ingest daily data from DEOS
-with 5 minute temporal scale.
+This module houses all filters for sea breeze detection for
+my thesis. The filters are as follows:
+1 - Current wind direction has easterly component and wind
+    direction 30 mins prior has westerly component
+2 - Air temperature has dropped 1 degC over same 30 min interval
+3 - Precipitation occurs at at least one station during the day
+4 -
+5 -
+6 -
 
 """
 
@@ -11,181 +18,125 @@ import math as m
 import csv
 
 
-#needs input file sent to module in format:
+#Needs input file sent to module in format:
 #infile = open ("/Users/dpmoore2927/Desktop/Test.csv", "r")
-def det5min(infile,station,year):
+def filt12(infile,station,numdays):
 
-    #read data
+    #Read data
     obs_list=infile.readlines()
     n=len(obs_list)
 
-    #check year for number of days
-    if year==2013 or year==2014 or year==2015 or year==2017:
-        numdays=365
-    else:
-        numdays=366 #2016 is a leap year
+    #Initialize values
+    k=0;i=0;rawdate="";date=0.0;
+    Date=np.zeros(numdays);Winddir=np.zeros(n)
+    Temp=np.zeros(n);Filt12=np.zeros(numdays)
 
-    #initialize values
-    k=0;i=0;yy=0;mm=0;dd=0;date=0;
-    Date=np.zeros(numdays,float);Winddir=np.zeros(n)
-    Temp=np.zeros(n);Sbb=np.zeros(numdays)
-
-    #loop reading the data
+    #Loop reading the data
     for obs in obs_list[1:]:
-        yy=float(obs.split()[0])
-        mm=float(obs.split()[1])
-        dd=float(obs.split()[2])
+        rawdate=obs.split(",")[0]
 
-        date=(yy*10000)+(mm*100)+dd #puts date into format: yyyymmdd
+        date=float(rawdate.replace("-","")) #Puts date into format: yyyymmdd
 
-        if i==0: #if first pass, sets date
+        #Check for/Set date
+        if k==0:#If first pass, sets date
             Date[k]=date
             k+=1
-        elif date!=Date[k-1]: #after first pass, checks to see if current date
-            Date[k]=date      #is different from previous
+        elif date!=Date[k-1]:#After first pass, checks to see if current date
+            Date[k]=date     #is different from previous
             k+=1
 
-        if obs.split()[5]=="": #checks for missing data
+        #Check for missing data. If not missing, fill arrays
+        if obs.split(",")[2]=="NAN" or obs.split(",")[2]=="":
             Temp[i]=999
         else:
-            Temp[i]=float(obs.split()[5])
-        if obs.split()[8]=="" or obs.split()[8]=="NAN":
+            Temp[i]=float(obs.split(",")[2])
+
+        if obs.split(",")[4]=="" or obs.split(",")[4]=="NAN":
             Winddir[i]=999
         else:
-            Winddir[i]=float(obs.split()[8])
+            Winddir[i]=float(obs.split(",")[4])
 
-        if Temp[i]!=999 and Winddir[i]!=999:
-            if Sbb[k-1]==1 #skips calculations if date has already
-                i+=1       #been flagged as a sb day
-                continue
+        if i>5: #Will only continue if we can refer back a half hour
+                #in data
 
+            if Temp[i]!=999 and Winddir[i]!=999\
+            and Temp[i-6]!=999 and Winddir[i-6]!=999:
 
-            #Testing whether the criteria are met
-            #Gilchrist method:
-            if i>5: #will only continue if we can refer back a half hour
-                    #in data
-                if Temp[i-6]==999 or Winddir[i-6]==999:
-
-                    Sbb[k-1]=0
-                    i+=1
+                if Filt12[k-1]==1: #Skips calculations if date has already
+                    i+=1       #been flagged as a SB day
                     continue
 
-                if 180>=np.absolute(Winddir[i]-Winddir[i-6])>=160 or \
-                180>=(360-np.absolute(Winddir[i]-Winddir[i-6]))>=160:
+                #Filter 1: See module header for details
+                if 180<=Winddir[i-6]<=360 and 0<=Winddir[i]<180:
 
-                    if (Temp[i]-Temp[i-6])<=-1: #if temperature has dropped
-                        Sbb[k-1]=1              #more than 1 degree (assign 1)
-                    else:
-                        Sbb[k-1]=0
-
-                else:
-                    Sbb[k-1]=0
+                    #Filter 2: See module header for details
+                    if (Temp[i-6]-Temp[i])<=-1:
+                        Filt12[k-1]=1
 
         i+=1
 
 
 #Print
+    #Return to top of file
+    infile.seek(0)
+
+    #print(station,sum(Filt12)) #purely check to see if detecting any SBD
+    return Filt12
+
+
+
+
+
+def filt3(infile,Filt3,numdays):
+
     """
-    count=0
-    sbbcount=0
-    while (count<365):
-        if sbb[count]==1:
-            sbbcount+=1
-        count+=1
-    print('The total number of sea breeze days at\
-    detected in 2015 is',sbbcount)
+    takes in column of 365 zeros and makes it 1 if that day
+    has precipitation, else if the date already has a 1, then
+    the day is skipped - this way we don't overwrite a 1 with
+    a 0.
     """
-    print(station,sum(Sbb))
-    return Sbb
 
-
-
-
-
-
-
-"""
-
-def det1hr(infile,outfile): #outdated...
-
-    #read data
+    #Read data
     obs_list=infile.readlines()
-    n=len(obs_list)
 
-    #initialize values
-    k=0;i=0;day=0
-    date=np.zeros(365,float);winddir=np.zeros(n)
-    temp=np.zeros(n);sbb=np.zeros(365)
+    #Initialize values
+    """
+    -k is counting variable to fill daily arrays
+    -rawdate is used to take the date string and convert it to a readable date below.
+    -minprecip is the lowest amount of precipitation we accept as a notification that there was precipitation on a given day (in mm)
+    -date is readable version of rawdate
+    -Date is array that houses the dates. we use this to compare to the date of the next row of data to see if we have changed days.
+    """
+    k=0;rawdate="";date=0.0;minprecip=0.0
+    Date=np.zeros(numdays);
 
-    #loop reading the data
+    #Loop reading the data
     for obs in obs_list[1:]:
-        day=float(obs.split(",")[0])
+        rawdate=obs.split(",")[0]
+        date=float(rawdate.replace("-","")) #Puts date into format: yyyymmdd
 
-        if i==0:
-            date[k]=day
+        if k==0:#If first pass, sets date
+            Date[k]=date
             k+=1
-        elif day!=date[k-1]:
-            date[k]=day
+        elif date!=Date[k-1]:#After first pass, checks to see if current date
+            Date[k]=date     #is different from previous
             k+=1
 
-        if obs.split(",")[2]=="":
-            temp[i]=999
-            winddir[i]=float(obs.split(",")[5])
-        elif  obs.split(",")[5]=="" or obs.split(",")[5]=="NAN":
-            winddir[i]=999
-            temp[i]=float(obs.split(",")[2])
+        #Check to see if date has already been flagged as SB.
+        if Filt3[k-1]==1.0:
+            continue
+
+        #Filter 3: See module header for details.
+        if obs.split(",") [8]=="": #Check for missing data
+            Filt3[k-1]=0.0
+        elif float(obs.split(",")[8])>minprecip:#See initialization for info.
+            Filt3[k-1]=1.0
         else:
-            temp[i]=float(obs.split(",")[2])
-            winddir[i]=float(obs.split(",")[5])
+            Filt3[k-1]=0.0
 
-            if sbb[k-1]==1:
-                i+=1
-                continue
+    infile.seek(0)#Return to top of the file
+    return Filt3
 
 
-            #Testing whether the criteria are met
-            #Gilchrist method:
-            if i>5:
 
-                if temp[i]==999 or temp[i-1]==999 or \
-                winddir[i]==999 or winddir[i-1]==999:
 
-                    sbb[k-1]=0
-                    i+=1
-                    continue
-
-                if np.absolute(winddir[i-1]-winddir[i])<=180 and \
-                np.absolute(winddir[i-1]-winddir[i])>=160:
-
-                    if (temp[i-1]-temp[i])<=-1:
-                        sbb[k-1]=1
-                        #print(date[k-1])
-                    else:
-                        sbb[k-1]=0
-
-                elif np.absolute(winddir[i-1]-winddir[i])>180 and \
-                (360-np.absolute(winddir[i-1]-winddir[i]))>=160:
-
-                    if (temp[i-1]-temp[i])<=-1:
-                        sbb[k-1]=1
-
-                    else:
-                        sbb[k-1]=0
-
-                else:
-                    sbb[k-1]=0
-
-        i+=1
-
-#Print
-
-    count=0
-    sbbcount=0
-    while (count<365):
-        if sbb[count]==1:
-            sbbcount+=1
-        count+=1
-    print('The total number of sea breeze days at',str(station),\
-    'detected is',sbbcount)
-
-"""

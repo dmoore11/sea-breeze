@@ -10,39 +10,43 @@ decimal format.
 import numpy as np
 import math as m
 
+"""
+Needs input file sent to module in format:
+infile = open ("/Users/dpmoore2927/Desktop/Test.txt", "r")
+OR .csv OR .dat
+"""
+def date(infile,numdays):
 
-#needs input file sent to module in format:
-#infile = open ("/Users/dpmoore2927/Desktop/Test.txt", "r")
-#OR .csv
-def date(infile,year):
-
-    #read data
+    #Read data
     obs_list=infile.readlines()
 
-    #check year for number of days
-    if year==2013 or year==2014 or year==2015 or year==2017:
-        numdays=365
-    else:
-        numdays=366 #2016 is a leap year
+    #Initialize values
+    """
+    -k is counting variable to fill daily arrays
+    -rawdate is used to take the date string and convert it to a readable date below.
+    -date is readable version of rawdate
+    -Date is array that houses the dates. we use this to compare to the date of the next row of data to see if we have changed days.
+    """
 
-    #initialize values
-    k=0;yy=0;dd=0;mm=0;date=0
+    k=0;rawdate="";date=0.0
     Date=np.zeros(numdays)
 
-    #loop reading the data
+    #Loop reading the data
     for obs in obs_list[1:]:
-        yy=float(obs.split()[0])
-        mm=float(obs.split()[1])
-        dd=float(obs.split()[2])
+        rawdate=obs.split(",")[0]
 
-        date=(yy*10000)+(mm*100)+dd #puts date into format: yyyymmdd
+        date=float(rawdate.replace("-","")) #Puts date into format: yyyymmdd
 
+        #First pass, set date.
         if k==0:
             Date[k]=date
             k+=1
+        #After first pass, check to see if date is same as previous
+        #pass. If not, fill Date with new date.
         elif date!=Date[k-1]:
             Date[k]=date
             k+=1
 
-    infile.seek(0)
+
+    infile.seek(0)#Return to top of file
     return Date
